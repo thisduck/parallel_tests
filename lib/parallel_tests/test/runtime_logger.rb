@@ -21,7 +21,10 @@ module ParallelTests
           lock do
             separator = "\n"
             groups = File.read(logfile).split(separator).map { |line| line.split(":") }.group_by(&:first)
-            lines = groups.map { |file, times| "#{file}:#{times.map(&:last).map(&:to_f).inject(:+)}" }
+            lines = groups.map do |file, times|
+              time = "%.2f" % times.map(&:last).map(&:to_f).inject(:+)
+              "#{file}:#{time}"
+            end
             File.write(logfile, lines.join(separator) + separator)
           end
         end
@@ -45,9 +48,8 @@ module ParallelTests
           end
         end
 
-        def message(test, time)
+        def message(test, delta)
           return unless method = test.public_instance_methods(true).detect { |method| method =~ /^test_/ }
-          delta = "%.2f" % time
           filename = test.instance_method(method).source_location.first.sub("#{Dir.pwd}/", "")
           "#{filename}:#{delta}"
         end
@@ -71,7 +73,25 @@ module ParallelTests
   end
 end
 
-if defined?(MiniTest::Unit)
+if defined?(Minitest::Runnable) # Minitest 5
+  class << Minitest::Runnable
+    alias_method :run_without_runtime_log, :run
+    def run(*args)
+      ParallelTests::Test::RuntimeLogger.log_test_run(self) do
+        run_without_runtime_log(*args)
+      end
+    end
+  end
+
+  class << Minitest
+    alias_method :run_without_runtime_log, :run
+    def run(*args)
+      result = run_without_runtime_log(*args)
+      ParallelTests::Test::RuntimeLogger.unique_log
+      result
+    end
+  end
+elsif defined?(MiniTest::Unit) # Minitest 4
   MiniTest::Unit.class_eval do
     alias_method :_run_suite_without_runtime_log, :_run_suite
     def _run_suite(*args)
@@ -87,7 +107,7 @@ if defined?(MiniTest::Unit)
       result
     end
   end
-else
+else # Test::Unit
   require 'test/unit/testsuite'
   class ::Test::Unit::TestSuite
     alias_method :run_without_timing, :run

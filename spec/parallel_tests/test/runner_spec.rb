@@ -32,43 +32,84 @@ describe ParallelTests::Test::Runner do
       ParallelTests::Test::Runner.tests_in_groups(*args)
     end
 
-    it "does not sort when passed false do_sort option" do
-      ParallelTests::Test::Runner.should_not_receive(:smallest_first)
-      call([], 1, :group_by => :found)
+    it "raises when passed invalid group" do
+      expect { call([], 1, group_by: :sdjhfdfdjs) }.to raise_error(ArgumentError)
     end
 
-    it "does sort when not passed do_sort option" do
-      ParallelTests::Test::Runner.stub!(:tests_with_runtime).and_return([])
-      ParallelTests::Grouper.should_receive(:group_features_by_size).and_return([])
-      call([], 1)
+    it "uses given when passed found" do
+      call(["a", "b", "c"], 2, group_by: :found).should == [["a", "c"], ["b"]]
     end
 
-    it "groups by single_process pattern and then via size" do
-      ParallelTests::Test::Runner.should_receive(:with_runtime_info).
-        and_return([
-          ['aaa', 5],
-          ['aaa2', 5],
-          ['bbb', 2],
-          ['ccc', 1],
-          ['ddd', 1]
-        ])
-      result = call([], 3, :single_process => [/^a.a/])
-      result.should == [["aaa", "aaa2"], ["bbb"], ["ccc", "ddd"]]
+    context "when passed no group" do
+      it "sort by file size" do
+        File.should_receive(:stat).with("a").and_return 1
+        File.should_receive(:stat).with("b").and_return 1
+        File.should_receive(:stat).with("c").and_return 3
+        call(["a", "b", "c"], 2)
+      end
+
+      it "sorts by runtime when runtime is available" do
+        ParallelTests::Test::Runner.should_receive(:puts).with("Using recorded test runtime")
+        ParallelTests::Test::Runner.should_receive(:runtimes).and_return({"a" => 1, "b" => 1, "c" => 3})
+        call(["a", "b", "c"], 2).should == [["c"], ["a", "b"]]
+      end
+
+      it "sorts by filesize when there are no files" do
+        ParallelTests::Test::Runner.should_receive(:puts).never
+        ParallelTests::Test::Runner.should_receive(:runtimes).and_return({})
+        call([], 2).should == [[], []]
+      end
+
+      it "sorts by filesize when runtime is too little" do
+        ParallelTests::Test::Runner.should_not_receive(:puts)
+        ParallelTests::Test::Runner.should_receive(:runtimes).and_return(["a:1"])
+        File.should_receive(:stat).with("a").and_return 1
+        File.should_receive(:stat).with("b").and_return 1
+        File.should_receive(:stat).with("c").and_return 3
+        call(["a", "b", "c"], 2)
+      end
     end
 
-    it "groups by size and adds isolated separately" do
-      pending if RUBY_PLATFORM == "java"
-      ParallelTests::Test::Runner.should_receive(:with_runtime_info).
-        and_return([
-          ['aaa', 0],
-          ['bbb', 3],
-          ['ccc', 1],
-          ['ddd', 2],
-          ['eee', 1]
-        ])
+    context "when passed runtime" do
+      around { |test| Dir.mktmpdir { |dir| Dir.chdir(dir, &test) } }
+      before do
+        ["aaa", "bbb", "ccc", "ddd"].each { |f| File.write(f, f) }
+        FileUtils.mkdir("tmp")
+      end
 
-      result = call([], 3, :isolate => true, :single_process => [/^aaa/])
-      result.should == [["aaa"], ["bbb", "eee"], ["ccc", "ddd"]]
+      it "fails when there is no log" do
+        lambda { call(["aaa"], 3, group_by: :runtime) }.should raise_error(Errno::ENOENT)
+      end
+
+      it "fails when there is too little log" do
+        File.write("tmp/parallel_runtime_test.log", "xxx:123\nyyy:123\naaa:123")
+        lambda { call(["aaa", "bbb", "ccc"], 3, group_by: :runtime) }.should raise_error(RuntimeError)
+      end
+
+      it "groups when there is enough log" do
+        File.write("tmp/parallel_runtime_test.log", "xxx:123\nbbb:123\naaa:123")
+        call(["aaa", "bbb", "ccc"], 3, group_by: :runtime)
+      end
+
+      it "groups with average for missing" do
+        File.write("tmp/parallel_runtime_test.log", "xxx:123\nbbb:10\nccc:1")
+        call(["aaa", "bbb", "ccc", "ddd"], 2, group_by: :runtime).should == [["bbb", "ccc"], ["aaa", "ddd"]]
+      end
+
+      it "groups by single_process pattern and then via size" do
+        ParallelTests::Test::Runner.should_receive(:runtimes).
+          and_return({"aaa" => 5, "bbb" => 2, "ccc" => 1, "ddd" => 1})
+        result = call(["aaa", "aaa2", "bbb", "ccc", "ddd"], 3, single_process: [/^a.a/], group_by: :runtime)
+        result.should == [["aaa", "aaa2"], ["bbb"], ["ccc", "ddd"]]
+      end
+
+      it "groups by size and adds isolated separately" do
+        pending if RUBY_PLATFORM == "java"
+        ParallelTests::Test::Runner.should_receive(:runtimes).
+          and_return({"aaa" => 0, "bbb" => 3, "ccc" => 1, "ddd" => 2})
+        result = call(["aaa", "bbb", "ccc", "ddd", "eee"], 3, isolate: true, single_process: [/^aaa/], group_by: :runtime)
+        result.should == [["aaa"], ["bbb", "eee"], ["ccc", "ddd"]]
+      end
     end
   end
 
