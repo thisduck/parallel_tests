@@ -82,7 +82,7 @@ module ParallelTests
       num_processes = groups.size
       num_tests = groups.map(&:size).inject(:+)
       puts "#{num_processes} processes for #{num_tests} #{name}s, ~ #{num_tests / groups.size} #{name}s per process"
-      puts groups.inspect
+      puts groups.to_yaml
     end
 
     #exit with correct status code so rake parallel:test && echo 123 works
