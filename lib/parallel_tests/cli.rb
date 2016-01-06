@@ -1,6 +1,7 @@
 require 'optparse'
 require 'tempfile'
 require 'parallel_tests'
+require 'yaml'
 
 module ParallelTests
   class CLI
