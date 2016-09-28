@@ -13,46 +13,55 @@ describe ParallelTests::CLI do
     end
 
     it "fails without file" do
-      subject.should_receive(:abort).with("Pass files or folders to run")
+      expect(subject).to receive(:abort).with("Pass files or folders to run")
       call(["-n3"])
     end
 
     it "parses execute" do
-      call(["--exec", "echo"]).should == {execute: "echo", files: []}
+      expect(call(["--exec", "echo"])).to eq(execute: "echo")
     end
 
     it "parses regular count" do
-      call(["test", "-n3"]).should == defaults.merge(:count => 3)
+      expect(call(["test", "-n3"])).to eq(defaults.merge(:count => 3))
     end
 
     it "parses count 0 as non-parallel" do
-      call(["test", "-n0"]).should == defaults.merge(:non_parallel => true)
+      expect(call(["test", "-n0"])).to eq(defaults.merge(:non_parallel => true))
     end
 
     it "parses non-parallel as non-parallel" do
-      call(["test", "--non-parallel"]).should == defaults.merge(:non_parallel => true)
+      expect(call(["test", "--non-parallel"])).to eq(defaults.merge(:non_parallel => true))
     end
 
     it "finds the correct type when multiple are given" do
       call(["test", "--type", "test", "-t", "rspec"])
-      subject.instance_variable_get(:@runner).should == ParallelTests::RSpec::Runner
+      expect(subject.instance_variable_get(:@runner)).to eq(ParallelTests::RSpec::Runner)
     end
 
     it "parses nice as nice" do
-      call(["test", "--nice"]).should == defaults.merge(:nice => true)
+      expect(call(["test", "--nice"])).to eq(defaults.merge(:nice => true))
     end
 
     it "parses --verbose" do
-      call(["test", "--verbose"]).should == defaults.merge(:verbose => true)
+      expect(call(["test", "--verbose"])).to eq(defaults.merge(:verbose => true))
+    end
+
+    it "parses --suffix" do
+      expect(call(["test", "--suffix", "_(test|spec).rb$"])).to eq(defaults.merge(:suffix => /_(test|spec).rb$/))
+    end
+
+    it "parses --first-is-1" do
+      expect(call(["test", "--first-is-1"])).
+        to eq(defaults.merge(:first_is_1 => true))
     end
 
     context "parse only-group" do
       it "group_by should be set to filesize" do
-        call(["test", "--only-group", '1']).should == defaults.merge(only_group: [1], group_by: :filesize)
+        expect(call(["test", "--only-group", '1'])).to eq(defaults.merge(only_group: [1], group_by: :filesize))
       end
 
       it "allows runtime" do
-        call(["test", "--only-group", '1', '--group-by', 'runtime']).should == defaults.merge(only_group: [1], group_by: :runtime)
+        expect(call(["test", "--only-group", '1', '--group-by', 'runtime'])).to eq(defaults.merge(only_group: [1], group_by: :runtime))
       end
 
       it "raise error when group_by isn't filesize" do
@@ -62,35 +71,166 @@ describe ParallelTests::CLI do
       end
 
       it "with multiple groups" do
-        call(["test", "--only-group", '4,5']).should == defaults.merge(only_group: [4,5], group_by: :filesize)
+        expect(call(["test", "--only-group", '4,5'])).to eq(defaults.merge(only_group: [4,5], group_by: :filesize))
       end
 
       it "with a single group" do
-        call(["test", "--only-group", '4']).should == defaults.merge(:only_group => [4], group_by: :filesize)
+        expect(call(["test", "--only-group", '4'])).to eq(defaults.merge(:only_group => [4], group_by: :filesize))
+      end
+    end
+
+    context "when the -- option separator is used" do
+      it "interprets arguments as files/directories" do
+        expect(call(%w(-- test))).to eq( files: %w(test))
+        expect(call(%w(-- test test2))).to eq( files: %w(test test2))
+        expect(call(%w(-- --foo test))).to eq( files: %w(--foo test))
+        expect(call(%w(-- test --foo test2))).to eq( files: %w(test --foo test2))
+
+      end
+
+      it "corectly handles arguments with spaces" do
+        expect(call(['--', 'file name with space'])).to eq( files: ['file name with space'])
+      end
+
+      context "when the -o options has also been given" do
+        it "merges the options together" do
+          expect(call(%w(-o '-f' -- test --foo test2))).to eq( files: %w(test --foo test2), test_options: "'-f'")
+        end
+      end
+
+      context "when a second -- option separator is used" do
+        it "interprets the first set as test_options" do
+          expect(call(%w(-- -r foo -- test))).to eq( files: %w(test), test_options: '-r foo')
+          expect(call(%w(-- -r foo -- test test2))).to eq( files: %w(test test2), test_options: '-r foo')
+          expect(call(%w(-- -r foo -o out.log -- test test2))).to eq( files: %w(test test2), test_options: '-r foo -o out.log')
+        end
+
+        context "when existing test_options have previously been given" do
+          it "appends the new options" do
+            expect(call(%w(-o '-f' -- -r foo.rb -- test))).to eq( files: %w(test), test_options: "'-f' -r foo.rb")
+          end
+          it "corectly handles argument values with spaces" do
+            argv = ["-o 'path with spaces1'", '--', '--out', 'path with spaces2', '--', 'foo']
+            expected_test_options = "'path with spaces1' --out path\\ with\\ spaces2"
+            expect(call(argv)).to eq( files: %w(foo), test_options: expected_test_options)
+          end
+        end
       end
     end
   end
 
   describe "#load_runner" do
     it "requires and loads default runner" do
-      subject.should_receive(:require).with("parallel_tests/test/runner")
-      subject.send(:load_runner, "test").should == ParallelTests::Test::Runner
+      expect(subject).to receive(:require).with("parallel_tests/test/runner")
+      expect(subject.send(:load_runner, "test")).to eq(ParallelTests::Test::Runner)
     end
 
     it "requires and loads rspec runner" do
-      subject.should_receive(:require).with("parallel_tests/rspec/runner")
-      subject.send(:load_runner, "rspec").should == ParallelTests::RSpec::Runner
+      expect(subject).to receive(:require).with("parallel_tests/rspec/runner")
+      expect(subject.send(:load_runner, "rspec")).to eq(ParallelTests::RSpec::Runner)
     end
 
     it "requires and loads runner with underscores" do
-      subject.should_receive(:require).with("parallel_tests/my_test_runner/runner")
-      subject.send(:load_runner, "my_test_runner").should == ParallelTests::MyTestRunner::Runner
+      expect(subject).to receive(:require).with("parallel_tests/my_test_runner/runner")
+      expect(subject.send(:load_runner, "my_test_runner")).to eq(ParallelTests::MyTestRunner::Runner)
     end
 
     it "fails to load unfindable runner" do
       expect{
-        subject.send(:load_runner, "foo").should == ParallelTests::RSpec::Runner
+        expect(subject.send(:load_runner, "foo")).to eq(ParallelTests::RSpec::Runner)
       }.to raise_error(LoadError)
+    end
+  end
+
+  describe ".report_failure_rerun_commmand" do
+    it "prints nothing if there are no failures" do
+      expect($stdout).not_to receive(:puts)
+
+      subject.send(:report_failure_rerun_commmand,
+        [
+          {exit_status: 0, command: 'foo', seed: nil, output: 'blah'}
+        ],
+        {verbose: true}
+      )
+    end
+
+    shared_examples :not_verbose_rerun do |options|
+      it 'prints nothing about rerun commands' do
+          expect {
+            subject.send(:report_failure_rerun_commmand,
+              [
+                {exit_status: 1, command: 'foo', seed: nil, output: 'blah'}
+              ],
+              options
+            )
+          }.to_not output(/Use the following command to run the group again/).to_stdout
+      end
+    end
+
+    describe "failure" do
+      context 'with empty options hash' do
+        include_examples :not_verbose_rerun, {}
+      end
+
+      context 'with option !verbose' do
+        include_examples :not_verbose_rerun, {verbose: false}
+      end
+
+      context 'with option verbose' do
+        it "prints a message and the command if there is a failure" do
+          expect {
+            subject.send(:report_failure_rerun_commmand,
+              [
+                {exit_status: 1, command: 'foo', seed: nil, output: 'blah'}
+              ],
+              {verbose: true}
+            )
+          }.to output("\n\nTests have failed for a parallel_test group. Use the following command to run the group again:\n\nfoo\n").to_stdout
+        end
+
+        it "prints multiple commands if there are multiple failures" do
+          expect {
+            subject.send(:report_failure_rerun_commmand,
+              [
+                {exit_status: 1, command: 'foo', seed: nil, output: 'blah'},
+                {exit_status: 1, command: 'bar', seed: nil, output: 'blah'},
+                {exit_status: 1, command: 'baz', seed: nil, output: 'blah'},
+              ],
+              {verbose: true}
+            )
+          }.to output(/foo\nbar\nbaz/).to_stdout
+        end
+
+        it "only includes failures" do
+          expect {
+            subject.send(:report_failure_rerun_commmand,
+              [
+                {exit_status: 1, command: 'foo --color', seed: nil, output: 'blah'},
+                {exit_status: 0, command: 'bar', seed: nil, output: 'blah'},
+                {exit_status: 1, command: 'baz', seed: nil, output: 'blah'},
+              ],
+              {verbose: true}
+            )
+          }.to output(/foo --color\nbaz/).to_stdout
+        end
+
+        it "prints the command with the seed added by the runner" do
+          command = 'rspec --color spec/foo_spec.rb'
+          seed = 555
+
+          subject.instance_variable_set(:@runner, ParallelTests::Test::Runner)
+          expect(ParallelTests::Test::Runner).to receive(:command_with_seed).with(command, seed).
+            and_return("my seeded command result --seed #{seed}")
+          expect {
+            subject.send(:report_failure_rerun_commmand,
+              [
+                {exit_status: 1, command: command, seed: 555, output: 'blah'},
+              ],
+              {verbose: true}
+            )
+          }.to output(/my seeded command result --seed 555/).to_stdout
+        end
+      end
     end
   end
 
@@ -100,51 +240,62 @@ describe ParallelTests::CLI do
     end
 
     it 'returns a plain fail message if colors are nor supported' do
-      subject.should_receive(:use_colors?).and_return(false)
-      subject.send(:final_fail_message).should ==  "Tests Failed"
+      expect(subject).to receive(:use_colors?).and_return(false)
+      expect(subject.send(:final_fail_message)).to eq("Tests Failed")
     end
 
     it 'returns a colorized fail message if colors are supported' do
-      subject.should_receive(:use_colors?).and_return(true)
-      subject.send(:final_fail_message).should == "\e[31mTests Failed\e[0m"
+      expect(subject).to receive(:use_colors?).and_return(true)
+      expect(subject.send(:final_fail_message)).to eq("\e[31mTests Failed\e[0m")
     end
   end
 
   describe "#run_tests_in_parallel" do
     context "specific groups to run" do
       let(:results){ {:stdout => "", :exit_status => 0} }
+      let(:common_options) {
+        { files: ["test"], group_by: :filesize, first_is_1: false }
+      }
       before do
-        subject.stub(:puts)
-        subject.should_receive(:load_runner).with("my_test_runner").and_return(ParallelTests::MyTestRunner::Runner)
-        ParallelTests::MyTestRunner::Runner.stub(:test_file_name).and_return("test")
-        ParallelTests::MyTestRunner::Runner.should_receive(:tests_in_groups).and_return([
+        allow(subject).to receive(:puts)
+        expect(subject).to receive(:load_runner).with("my_test_runner").and_return(ParallelTests::MyTestRunner::Runner)
+        allow(ParallelTests::MyTestRunner::Runner).to receive(:test_file_name).and_return("test")
+        expect(ParallelTests::MyTestRunner::Runner).to receive(:tests_in_groups).and_return([
           ['aaa','bbb'],
           ['ccc', 'ddd'],
           ['eee', 'fff']
         ])
-        subject.should_receive(:report_results).and_return(nil)
+        expect(subject).to receive(:report_results).and_return(nil)
       end
 
       it "calls run_tests once when one group specified" do
-        subject.should_receive(:run_tests).once.and_return(results)
+        expect(subject).to receive(:run_tests).once.and_return(results)
         subject.run(['test', '-n', '3', '--only-group', '1', '-t', 'my_test_runner'])
       end
 
       it "calls run_tests twice when two groups are specified" do
-        subject.should_receive(:run_tests).twice.and_return(results)
+        expect(subject).to receive(:run_tests).twice.and_return(results)
         subject.run(['test', '-n', '3', '--only-group', '1,2', '-t', 'my_test_runner'])
       end
 
       it "run only one group specified" do
-        options = {count: 3, only_group: [2], files: ["test"], group_by: :filesize}
-        subject.should_receive(:run_tests).once.with(['ccc', 'ddd'], 0, 1, options).and_return(results)
+        options = common_options.merge(count: 3, only_group: [2])
+        expect(subject).to receive(:run_tests).once.with(['ccc', 'ddd'], 0, 1, options).and_return(results)
         subject.run(['test', '-n', '3', '--only-group', '2', '-t', 'my_test_runner'])
       end
 
+      it "run last group when passing a group that is not filled" do
+        count = 3
+        options = common_options.merge(count: count, only_group: [count])
+        expect(subject).to receive(:run_tests).once.with(['eee', 'fff'], 0, 1, options).and_return(results)
+        subject.run(['test', '-n', count.to_s, '--only-group', count.to_s, '-t', 'my_test_runner'])
+      end
+
       it "run twice with multiple groups" do
-        options = {count: 3, only_group: [2,3], files: ["test"], group_by: :filesize}
-        subject.should_receive(:run_tests).once.ordered.with(['ccc', 'ddd'], 0, 1, options).and_return(results)
-        subject.should_receive(:run_tests).once.ordered.with(['eee', 'fff'], 1, 1, options).and_return(results)
+        skip "fails on jruby" if RUBY_PLATFORM == "java"
+        options = common_options.merge(count: 3, only_group: [2,3])
+        expect(subject).to receive(:run_tests).once.ordered.with(['ccc', 'ddd'], 0, 1, options).and_return(results)
+        expect(subject).to receive(:run_tests).once.ordered.with(['eee', 'fff'], 1, 1, options).and_return(results)
         subject.run(['test', '-n', '3', '--only-group', '2,3', '-t', 'my_test_runner'])
       end
     end
@@ -156,22 +307,22 @@ describe ParallelTests::CLI do
     end
 
     it "displays for durations near one minute" do
-      call(59).should == nil
-      call(60).should == " (1:00)"
-      call(61).should == " (1:01)"
+      expect(call(59)).to eq(nil)
+      expect(call(60)).to eq(" (1:00)")
+      expect(call(61)).to eq(" (1:01)")
     end
 
     it "displays for durations near one hour" do
-      call(3599).should == " (59:59)"
-      call(3600).should == " (1:00:00)"
-      call(3601).should == " (1:00:01)"
+      expect(call(3599)).to eq(" (59:59)")
+      expect(call(3600)).to eq(" (1:00:00)")
+      expect(call(3601)).to eq(" (1:00:01)")
     end
 
     it "displays the correct string for miscellaneous durations" do
-      call(9296).should  == " (2:34:56)"
-      call(45296).should == " (12:34:56)"
-      call(2756601).should == " (765:43:21)" # hours into three digits?  Buy more CI hardware...
-      call(0).should == nil
+      expect(call(9296)).to  eq(" (2:34:56)")
+      expect(call(45296)).to eq(" (12:34:56)")
+      expect(call(2756601)).to eq(" (765:43:21)") # hours into three digits?  Buy more CI hardware...
+      expect(call(0)).to eq(nil)
     end
   end
 end

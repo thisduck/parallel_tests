@@ -11,6 +11,7 @@ describe ParallelTests::Test::RuntimeLogger do
   end
 
   it "writes a correct log on test-unit" do
+    skip if RUBY_PLATFORM == "java" # just too slow ...
     use_temporary_directory do
       # setup simple structure
       FileUtils.mkdir "test"
@@ -39,15 +40,16 @@ describe ParallelTests::Test::RuntimeLogger do
 
       # log looking good ?
       lines = File.read("tmp/parallel_runtime_test.log").split("\n").sort.map { |x|x .sub!(/\d$/, '') }
-      lines.should == [
+      expect(lines).to eq([
         "test/0_test.rb:0.7",
         "test/1_test.rb:0.7",
-      ]
+      ])
     end
   end
 
   # static directory with gems so it's fast on travis
   it "writes a correct log on minitest-4" do
+    skip if RUBY_PLATFORM == "java" # just too slow ...
     Dir.chdir(Bundler.root.join("spec/fixtures/minitest4")) do
       Bundler.with_clean_env do
         sh "bundle --local --quiet"
@@ -56,15 +58,16 @@ describe ParallelTests::Test::RuntimeLogger do
 
       # log looking good ?
       lines = File.read("tmp/parallel_runtime_test.log").split("\n").sort.map { |x| x.sub(/\d$/, "") }
-      lines.should == [
+      expect(lines).to eq([
         "test/0_test.rb:0.7",
         "test/1_test.rb:0.7",
-      ]
+      ])
       FileUtils.rm("tmp/parallel_runtime_test.log")
     end
   end
 
   it "writes a correct log on minitest-5" do
+    skip if RUBY_PLATFORM == "java" # just too slow ...
     use_temporary_directory do
       # setup simple structure
       FileUtils.mkdir "test"
@@ -93,10 +96,10 @@ describe ParallelTests::Test::RuntimeLogger do
 
       # log looking good ?
       lines = File.read("tmp/parallel_runtime_test.log").split("\n").sort.map { |x| x.sub(/\d$/, "") }
-      lines.should == [
+      expect(lines).to eq([
         "test/0_test.rb:0.7",
         "test/1_test.rb:0.7",
-      ]
+      ])
     end
   end
 end

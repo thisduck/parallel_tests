@@ -20,8 +20,26 @@ describe ParallelTests::Cucumber::Runner do
           "Failing Scenarios:", "cucumber features/failure:3", "cucumber features/failure:4",
           "Failing Scenarios:", "cucumber features/failure:5", "cucumber features/failure:6"
         ]
-        call(results).should == "Failing Scenarios:\ncucumber features/failure:1\ncucumber features/failure:2\ncucumber features/failure:3\ncucumber features/failure:4\ncucumber features/failure:5\ncucumber features/failure:6\n\n"
+        expect(call(results)).to eq("Failing Scenarios:\ncucumber features/failure:1\ncucumber features/failure:2\ncucumber features/failure:3\ncucumber features/failure:4\ncucumber features/failure:5\ncucumber features/failure:6\n\n")
       end
     end
   end
+
+  describe ".command_with_seed" do
+    it "adds the randomized seed" do
+      expect(ParallelTests::Cucumber::Runner.command_with_seed("cucumber", 555)).
+        to eq("cucumber --order random:555")
+    end
+
+    it "does not duplicate existing random command" do
+      expect(ParallelTests::Cucumber::Runner.command_with_seed("cucumber --order random good1.feature", 555)).
+        to eq("cucumber good1.feature --order random:555")
+    end
+
+    it "does not duplicate existing random command with seed" do
+      expect(ParallelTests::Cucumber::Runner.command_with_seed("cucumber --order random:123 good1.feature", 555)).
+        to eq("cucumber good1.feature --order random:555")
+    end
+  end
+
 end
