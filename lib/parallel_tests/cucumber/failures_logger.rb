@@ -16,7 +16,7 @@ module ParallelTests
         lock_output do
           @failures.each do |file, lines|
             lines.each do |line|
-              @io.print "#{file}:#{line} "
+              @io.puts "#{file}:#{line} "
             end
           end
         end
